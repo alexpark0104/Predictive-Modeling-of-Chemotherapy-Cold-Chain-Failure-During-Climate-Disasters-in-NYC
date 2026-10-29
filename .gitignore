@@ -5,3 +5,4 @@ raw_data/places_nyc_full.csv
 raw_data/acs_b01001_ny_tracts.csv
 raw_data/*.geojson
 raw_data/flood_shp/
+Progress.md
