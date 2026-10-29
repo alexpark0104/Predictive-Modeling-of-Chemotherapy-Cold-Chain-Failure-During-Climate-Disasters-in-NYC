@@ -9,7 +9,8 @@ import matplotlib.patches as mpatches
 import folium
 import os
 
-ROOT = Path.home() / "SRP"
+# Dynamically find the project root (works on any machine)
+ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "raw_data"
 FIGURES = ROOT / "figures"
 FIGURES.mkdir(exist_ok=True)

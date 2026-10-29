@@ -7,7 +7,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-ROOT = Path.home() / "SRP"
+# Dynamically find the project root (works on any machine)
+ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "raw_data"
 FIGURES = ROOT / "figures"
 FIGURES.mkdir(exist_ok=True)
@@ -257,54 +258,51 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 print("Running Monte Carlo Sensitivity Analysis (1,000 simulations)...")
+np.random.seed(42) # <--- CRITICAL: Ensures exact reproducibility
 
-# Number of simulations
 n_sims = 1000
-
-# Storage for results
 total_risk_results = []
 flood_zone_risk_results = []
 
+# We will evaluate risk specifically for Trastuzumab (the most sensitive drug)
+drug_limit_hrs = drugs["trastuzumab"]["stable_25C_hours"] # 3 hours
+
 for i in range(n_sims):
-    # Randomly sample parameters within plausible ranges
-    # 1. Fridge insulation (tau_fridge_hr): 10 to 14 hours
+    # Distributions: Uniform for fridge insulation, temp, and backup
     sim_tau_fridge = np.random.uniform(10, 14)
-    
-    # 2. Outdoor temperature (summer blackout): 25°C to 35°C
     sim_T_outdoor = np.random.uniform(25, 35)
-    
-    # 3. Treatment fraction (active chemo): 10% to 25%
     sim_treatment_fraction = np.random.uniform(0.10, 0.25)
     
-    # 4. Backup power availability: 0 to 24 hours
-    sim_backup_hours = np.random.uniform(0, 24)
+    # Inland tracts get 0-24h backup. Flood tracts are forced to 0h backup.
+    sim_backup_inland = np.random.uniform(0, 24)
+    sim_backup_flood = 0.0  # Flooded basements destroy generators
 
     # Calculate time to breach for this iteration
-    tb = time_to_8C(
-        tau_fridge_hr=sim_tau_fridge,     # matching the new function
-        tau_building_hr=4.0,              # matching the new function
-        T_outdoor=sim_T_outdoor,
-        backup_hours=sim_backup_hours
-    )
+    tb_inland = time_to_8C(sim_tau_fridge, 4.0, T_outdoor=sim_T_outdoor, backup_hours=sim_backup_inland)
+    tb_flood = time_to_8C(sim_tau_fridge, 4.0, T_outdoor=sim_T_outdoor, backup_hours=sim_backup_flood)
     
-    # Calculate probability of failure
-    pf = outage_exceedance_prob(mean_hours=6.2, duration_threshold=tb)
+    # Time to total drug failure = Fridge breach time + Drug survival time at room temp
+    t_fail_inland = tb_inland + drug_limit_hrs
+    t_fail_flood = tb_flood + drug_limit_hrs
     
-    # Calculate active patients based on simulated treatment fraction
+    # Probabilities (using 6.2h mean for inland, 72h mean for flood)
+    pf_inland = outage_exceedance_prob(mean_hours=6.2, duration_threshold=t_fail_inland)
+    pf_flood = outage_exceedance_prob(mean_hours=72, duration_threshold=t_fail_flood)
+    
     sim_active_patients = tracts["est_cancer_patients"] * sim_treatment_fraction
     
-    # Calculate risk for flood zone vs non-flood zone
-    sim_flood_risk = pf * sim_active_patients[tracts["in_flood_zone"]].sum()
-    sim_total_risk = pf * sim_active_patients.sum()
+    # Calculate risk
+    sim_flood_risk = pf_flood * sim_active_patients[tracts["in_flood_zone"]].sum()
+    sim_inland_risk = pf_inland * sim_active_patients[~tracts["in_flood_zone"]].sum()
     
-    total_risk_results.append(sim_total_risk)
+    total_risk_results.append(sim_flood_risk + sim_inland_risk)
     flood_zone_risk_results.append(sim_flood_risk)
 
-# Plot the distribution of results
+# Plotting
 fig, ax = plt.subplots(figsize=(8, 6))
-ax.hist(total_risk_results, bins=30, alpha=0.7, label='Citywide Risk', color='blue')
+ax.hist(total_risk_results, bins=30, alpha=0.7, label='Citywide Risk (Patient-Equivalents)', color='blue')
 ax.hist(flood_zone_risk_results, bins=30, alpha=0.7, label='Flood Zone Risk', color='red')
-ax.set_xlabel('Total Estimated Patients at Risk')
+ax.set_xlabel('Estimated Patient-Equivalents at Risk')
 ax.set_ylabel('Number of Simulations')
 ax.set_title('Monte Carlo Sensitivity Analysis (1,000 Simulations)')
 ax.legend()
@@ -312,13 +310,9 @@ plt.savefig(FIGURES / "monte_carlo_sensitivity.png", dpi=150, bbox_inches='tight
 plt.close()
 print("saved figures/monte_carlo_sensitivity.png")
 
-# Print summary statistics
-print(f"Citywide Risk Mean: {np.mean(total_risk_results):.0f} patients")
-print(f"Citywide Risk 95% CI: [{np.percentile(total_risk_results, 2.5):.0f}, {np.percentile(total_risk_results, 97.5):.0f}]")
-print(f"Flood Zone Risk Mean: {np.mean(flood_zone_risk_results):.0f} patients")
 # %%
-# Sandy validation 
-# Hospitals that were fine vs Hospitals that weren't fine
+# Prove the model correctly separates Flood Hazard from Patient Density
+
 hospitals_data = {
     "hospital": [
         "NYU Langone (Failed)", 
@@ -342,8 +336,14 @@ hospitals_gdf = gpd.GeoDataFrame(
 if hospitals_gdf.crs != tracts.crs:
     hospitals_gdf = hospitals_gdf.to_crs(tracts.crs)
 
-hospital_tracts = gpd.sjoin(hospitals_gdf, tracts[["geoid", "boroname", "climate_coldchain_risk", "geometry"]], how="left", predicate="intersects")
+hospital_tracts = gpd.sjoin(
+    hospitals_gdf, 
+    tracts[["geoid", "boroname", "climate_coldchain_risk", "geometry"]], 
+    how="left", 
+    predicate="intersects"
+)
 
+# Merge the percentile back into our hospital data
 tracts["risk_percentile"] = tracts["climate_coldchain_risk"].rank(pct=True)
 
 hospital_validation = hospital_tracts.merge(
@@ -351,15 +351,6 @@ hospital_validation = hospital_tracts.merge(
     on="geoid", 
     how="left"
 )
-
-print("Validation Results:")
-for index, row in hospital_validation.iterrows():
-    print(f"\n{row['hospital']} ({row['boroname']}):")
-    print(f"  Tract GEOID: {row['geoid']}")
-    print(f"  Risk Percentile: {row['risk_percentile'] * 100:.1f}th percentile")
-
-# %%
-# Prove the model correctly separates Flood Hazard from Patient Density
 
 for index, row in hospital_validation.iterrows():
     # If it's in the flood zone, the model uses the 72h outage. If not, the 6.2h outage.
