@@ -1,45 +1,45 @@
 # Predictive Modeling of Chemotherapy Cold-Chain Failure During Climate Disasters in New York City
 
 ## Overview
-This repository contains a multi-hazard, physics-based computational model that predicts census-tract-level risks of chemotherapy cold-chain failure during climate disasters (floods, hurricanes, and blackouts) in New York City. 
+This repository contains a multi-hazard, physics-based computational model I built to predict census-tract-level risks of chemotherapy cold-chain failure during climate disasters (floods, hurricanes, and blackouts) in New York City. 
 
-While traditional disaster planning maps physical hazards (e.g., flood zones), this model maps **biological and infrastructural failure**. It calculates the time required for a pharmacy refrigerator to breach the 8°C safety threshold, compares it against specific drug degradation curves, and models the probability of power outages overwhelming hospital backup generators.
+While traditional disaster planning maps physical hazards (e.g., flood zones), my model maps **biological and infrastructural failure**. It calculates the time required for a pharmacy refrigerator to breach the 8°C safety threshold, compares it against specific drug degradation curves, and models the probability of power outages overwhelming hospital backup generators.
 
 ## Core Methodology
-The model computes risk using the following formula:
-`ColdChainRisk = P(outage > time_to_8C) × active_chemo_patients`
+I compute risk using the following formula:
+`ColdChainRisk = P(outage > time_to_8C) × active_chemo_patients_proxy`
 
-1. **Thermal Physics:** A lumped-capacitance thermal model calibrated to NIST data calculates how fast a pharmacy fridge warms up during a blackout.
-2. **Biological Constraints:** Drug-specific stability data (from STABILIS) determines viability (e.g., Trastuzumab degrades in 3 hours at room temp; Rituximab survives for 15 days).
-3. **Probabilistic Hazard:** Uses lognormal distributions of power outage durations (based on ConEd CAIDI data).
-4. **Geospatial Vulnerability:** Integrates CDC Social Vulnerability Index (SVI), PLACES cancer prevalence, Census ACS adult population, and Sandy Inundation Zones.
-5. **Statistical Robustness:** A 1,000-iteration Monte Carlo simulation handles parameter uncertainty.
+1. **Thermal Physics:** I used a lumped-capacitance thermal model calibrated to NIST data to calculate how fast a pharmacy fridge warms up during a blackout.
+2. **Biological Constraints:** I integrated drug-specific stability data (from STABILIS) to determine viability (e.g., Trastuzumab degrades in 3 hours at room temp; Rituximab survives for 15 days).
+3. **Probabilistic Hazard:** I applied lognormal distributions of power outage durations (based on ConEd CAIDI data).
+4. **Geospatial Vulnerability:** I integrated the CDC Social Vulnerability Index (SVI), PLACES cancer prevalence, Census ACS adult population, and Sandy Inundation Zones.
+5. **Statistical Robustness:** I ran a 1,000-iteration Monte Carlo simulation to handle parameter uncertainty.
 
 ---
 
 ## EXPLICIT ASSUMPTIONS & LIMITATIONS (READ CAREFULLY)
 
-This model is an academic screening tool, **not a real-time pharmacy control system**. It contains deliberate simplifications and assumptions due to data availability constraints. 
+This model is an academic screening tool, **not an operational pharmacy-control system**. It contains deliberate simplifications and assumptions due to data availability constraints. 
 
-### 1. The "Active Chemo" Assumption
-*   **Assumption:** We use CDC PLACES data for cancer prevalence, which estimates *ever-diagnosed* cancer survivors. To estimate the population on *active* chemotherapy, we multiply total survivors by a **15% treatment fraction** (bounded between 10% and 25% in sensitivity analysis).
-*   **Limitation:** This is a statistical proxy. We do not have tract-level data on active infusion schedules. 
+### 1. Proxy Estimates for Active Chemotherapy Population
+*   **Assumption:** I used CDC PLACES data for cancer prevalence, which estimates *ever-diagnosed* cancer survivors. To estimate the population on *active* chemotherapy, I multiplied total survivors by a **15% treatment fraction** (bounded between 10% and 25% in my sensitivity analysis).
+*   **Limitation:** These patient counts are **demographic proxy estimates**. I do not have tract-level data on active infusion schedules. 
 
 ### 2. The Missing Primary Data (No Survey)
-*   **Assumption:** We could not obtain primary survey data from NYC infusion centers regarding their exact generator capacity and fuel status due to privacy and logistical constraints. 
-*   **Limitation:** Instead of assuming a single value, we used a **1,000-run Monte Carlo simulation** that randomly varies backup power from 0 to 24 hours. This provides a confidence interval rather than a point estimate, but it does not replace actual hospital infrastructure audits.
+*   **Assumption:** Because I could not obtain primary survey data from NYC infusion centers regarding their exact generator capacity and fuel status due to privacy and logistical constraints, I did not guess a single value.
+*   **Limitation:** Instead, I used a **1,000-run Monte Carlo simulation** that randomly varies backup power from 0 to 24 hours. This provides a confidence interval rather than a point estimate, but it does not replace actual hospital infrastructure audits.
 
 ### 3. The Physics of the Fridge
-*   **Assumption:** The fridge uses a first-order lumped-capacitance thermal model (tau = 12 hours). It assumes the fridge door remains closed during the outage and does not account for thermal ballast (e.g., water bottles) or specific fridge brands.
-*   **Limitation:** It is a generalized model. A poorly maintained fridge will fail faster; a modern, highly insulated fridge will fail slower.
+*   **Assumption:** I used a first-order lumped-capacitance thermal model (tau = 12 hours). It assumes the fridge door remains closed during the outage and does not account for thermal ballast (e.g., water bottles) or specific fridge brands.
+*   **Limitation:** This is a generalized physics model. A poorly maintained fridge will fail faster; a modern, highly insulated fridge will fail slower.
 
 ### 4. Outage Duration Modeling
 *   **Assumption:** For tracts inland, the model assumes a 6.2-hour outage (ConEd summer average). For tracts intersecting the Sandy Flood Zone, the model assumes a catastrophic 72-hour outage.
-*   **Limitation:** This is a binary geographic hazard trigger. In reality, a coastal hospital with a 14th-floor generator (like Bellevue) might have power, but lose it anyway due to flooded basement fuel pumps. We model the *probability* of systemic failure, not specific mechanical failures.
+*   **Limitation:** This is a geographic hazard trigger. In reality, a coastal hospital with a 14th-floor generator (like Bellevue) might have power, but lose it anyway due to flooded basement fuel pumps. I model the *probability* of systemic failure, not specific mechanical failures.
 
-### 5. Retrospective Validation (Sandy Backtest)
-*   **Assumption:** The model was validated by backtesting against Hurricane Sandy (2012). It successfully assigned a 99.6% failure probability to the tracts containing NYU Langone, Bellevue, and Coney Island Hospital (which evacuated), and a 66.6% probability to inland control hospitals (Mount Sinai, Montefiore).
-*   **Limitation:** We are validating the *spatial and infrastructural assumptions* (floods cause long outages which cause cold-chain failure), not the exact number of spoiled vials. We do not have historical data on exactly how many doses of Trastuzumab were lost at NYU in 2012.
+### 5. Retrospective Spatial Backtest (Sandy)
+*   **Assumption:** I backtested the model against Hurricane Sandy (2012). Because historical data on the exact number of spoiled chemotherapy doses is unavailable, **this is a spatial backtest, not an observed-count validation**. 
+*   **Limitation:** I validated the model's spatial prediction of hospital infrastructure failure, not the physical count of ruined vials. The model successfully assigned a 99.6% cold-chain failure probability to the tracts containing NYU Langone, Bellevue, and Coney Island Hospital (which evacuated), and a 66.6% probability to inland control hospitals (Mount Sinai, Montefiore).
 
 ---
 
@@ -54,7 +54,7 @@ This model is an academic screening tool, **not a real-time pharmacy control sys
 3. Create a virtual environment: `python3 -m venv .venv`
 4. Activate it: `source .venv/bin/activate`
 5. Install dependencies: `pip install -r requirements.txt`
-6. Download the raw data into `raw_data/` (see `PROGRESS.md` for sources, as files exceed GitHub limits).
+6. Download the raw data into `raw_data/` (See the "Data Sources" section below for links, as files exceed GitHub limits).
 7. Run `python notebooks/explore.py` to build the demographic baseline.
 8. Run `python notebooks/coldchain.py` to execute the thermal model, flood overlay, Monte Carlo, and Sandy validation.
 
