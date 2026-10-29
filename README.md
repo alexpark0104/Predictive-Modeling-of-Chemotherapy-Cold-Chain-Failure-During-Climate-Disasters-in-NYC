@@ -1,11 +1,11 @@
 # Predictive Modeling of Chemotherapy Cold-Chain Failure During Climate Disasters in New York City
 
-## 📖 Overview
+## Overview
 This repository contains a multi-hazard, physics-based computational model I built to predict census-tract-level risks of chemotherapy cold-chain failure during climate disasters in New York City. 
 
 While traditional disaster planning maps physical hazards, my model maps **biological and infrastructural failure**. It calculates the time required for a pharmacy refrigerator to breach the 8°C safety threshold, adds the specific biological degradation time of the drug, and models the probability of power outages overwhelming hospital backup generators.
 
-## 🔬 Core Methodology
+## Core Methodology
 I compute risk using the following formula:
 `ColdChainRisk = P(outage > total_time_to_failure) × active_chemo_patients_proxy`
 
@@ -17,7 +17,7 @@ I compute risk using the following formula:
 
 ---
 
-## ⚠️ EXPLICIT ASSUMPTIONS & LIMITATIONS
+## EXPLICIT ASSUMPTIONS & LIMITATIONS
 
 This model is an academic screening tool, **not an operational pharmacy-control system**. 
 
@@ -38,7 +38,7 @@ This model is an academic screening tool, **not an operational pharmacy-control 
 
 ---
 
-## 📂 Expected Output Files
+## Expected Output Files
 Running `coldchain.py` and `explore.py` will generate the following files in the `figures/` directory:
 *   `svi_map_clean.png`: NYC Social Vulnerability Index with reconstructed tract hatching.
 *   `cancer_map.png`: Cancer prevalence by census tract.
@@ -46,7 +46,7 @@ Running `coldchain.py` and `explore.py` will generate the following files in the
 *   `coldchain_risk_flood.png`: Risk map overlaid with the Sandy flood inundation zones.
 *   `monte_carlo_sensitivity.png`: Histogram of 1,000 simulation runs.
 
-## 💻 Setup & Reproducibility
+## Setup & Reproducibility
 1. Clone the repo.
 2. Ensure you have Python 3.10+ installed.
 3. Create a virtual environment: `python3 -m venv .venv`
@@ -56,7 +56,7 @@ Running `coldchain.py` and `explore.py` will generate the following files in the
 7. Run `python notebooks/explore.py`
 8. Run `python notebooks/coldchain.py`
 
-## 📚 Data Sources & Versions
+## Data Sources & Versions
 *   **CDC SVI 2022:** [Download Link](https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html) (Census Tract level).
 *   **CDC PLACES 2024:** [Download Link](https://chronicdata.cdc.gov/500-Cities-Places/PLACES-Local-Data-for-Better-Health-Census-Tract-D/ai6z-tcin) (Crude prevalence).
 *   **US Census ACS 2024:** [Download Link](https://data.census.gov) (Table B01001 - Sex by Age).
