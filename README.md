@@ -3,7 +3,7 @@
 ## Research Question
 **Within the tested parameter ranges, which uncertainties—flood-zone outage duration, inland outage duration, backup power, temperature, or treatment-fraction assumptions—contribute most to estimated trastuzumab cold-chain exposure risk in NYC?**
 
-## 🔬 Overview
+## Overview
 This repository contains a scenario-based computational epidemiology model. It estimates patient-equivalent exposure to trastuzumab cold-chain failure during climate disasters in NYC. 
 
 *Note: This model estimates scenario-based exposure under explicitly stated assumptions. It does not predict observed spoiled doses or validate physical failure counts.*
