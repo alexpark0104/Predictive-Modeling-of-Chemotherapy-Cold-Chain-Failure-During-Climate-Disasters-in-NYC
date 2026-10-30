@@ -21,14 +21,14 @@ This repository contains a scenario-based computational epidemiology model. It e
 *   **OAT Sensitivity Limitations:** The one-way sensitivity analysis tests parameters individually and cannot prove global dominance or causal importance.
 
 ## Key Findings
-1.  **The Dominant Variables:** Within the tested parameter ranges, the One-Way Sensitivity Analysis identifies **Inland Backup Power** and **Inland Outage Duration** as the largest drivers of citywide estimated exposure. 
+1.  **Denominator vs. Infrastructure Uncertainty:** The One-Way Sensitivity Analysis shows that **treatment fraction** is the largest overall driver, as it scales the entire patient denominator. However, among operational hazard variables, **inland outage duration** and **inland backup power** have the largest effects.
 2.  **Coastal vs. Inland:** The model assigns a 98.1% failure probability to coastal flood-zone tracts and a 35.5% failure probability to inland tracts.
-3.  **The 24-Hour Illusion:** A 24-hour backup generator during a 72-hour hurricane outage still results in significant cold-chain exposure.
+3.  **The Inland Backup Challenge:** While flood zones face catastrophic risk (and are assigned zero backup in the model), inland tracts face significant exposure because a standard 6.2-hour outage can overwhelm typical backup infrastructure when combined with the 3-hour drug survival limit.
 
 ## Expected Outputs
 *   `figures/final_risk_map.png`: Spatial distribution of risk.
 *   `figures/sensitivity_tornado.png`: One-Way (OAT) Sensitivity Analysis plot.
-*   `figures/sensitivity_results.csv`: Numerical data for the Tornado plot.
+*   `figures/sensitivity_results.csv`: Numerical data for the Tornado plot (low, baseline, high, range).
 *   `figures/monte_carlo_results.csv`: Auditable 1,000-run simulation data.
 
 ## Data and Reproducibility
@@ -48,10 +48,11 @@ To reproduce this pipeline from a fresh clone, download the following datasets i
 3. `python notebooks/explore.py`
 4. `python notebooks/coldchain.py`
 
-## References
-*   **CDC SVI:** Agency for Toxic Substances and Disease Registry (2022). Social Vulnerability Index.
-*   **CDC PLACES:** Centers for Disease Control and Prevention (2024). Local Data for Better Health.
-*   **US Census ACS:** United States Census Bureau (2024). American Community Survey 5-Year Estimates.
-*   **NIST:** National Institute of Standards and Technology. Refrigerator Thermal Dynamics.
-*   **STABILIS:** French Society of Oncology Pharmacy. Drug Stability Database.
-*   **NY DPS:** New York Department of Public Service. ConEd Outage Reliability Reports (CAIDI).
+## 📚 References
+1.  **CDC SVI:** Agency for Toxic Substances and Disease Registry (2022). Social Vulnerability Index. [https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html](https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html)
+2.  **CDC PLACES:** Centers for Disease Control and Prevention (2024). Local Data for Better Health. [https://chronicdata.cdc.gov/500-Cities-Places/PLACES-Local-Data-for-Better-Health-Census-Tract-D/ai6z-tcin](https://chronicdata.cdc.gov/500-Cities-Places/PLACES-Local-Data-for-Better-Health-Census-Tract-D/ai6z-tcin)
+3.  **US Census ACS:** United States Census Bureau (2024). American Community Survey 5-Year Estimates. [https://data.census.gov](https://data.census.gov)
+4.  **NIST:** National Institute of Standards and Technology. Refrigerator Thermal Dynamics. [https://www.nist.gov](https://www.nist.gov)
+5.  **STABILIS:** French Society of Oncology Pharmacy. Drug Stability Database. [https://www.stabilis.org](https://www.stabilis.org)
+6.  **NYC Open Data:** Sandy Inundation Zones. [https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5](https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5)
+7.  **NY DPS:** New York Department of Public Service. ConEd Outage Reliability Reports (CAIDI). [https://documents.dps.ny.gov](https://documents.dps.ny.gov)
