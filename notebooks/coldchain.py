@@ -30,7 +30,6 @@ print("tracts loaded:", len(tracts))
 # ---------- LOAD FLOOD ZONES ----------
 
 print("Loading flood zones...")
-print("Loading flood zones...")
 flood_geojson = DATA / "flood.geojson"
 flood_shp = glob.glob(str(DATA / "flood_shp" / "*.shp"))
 
