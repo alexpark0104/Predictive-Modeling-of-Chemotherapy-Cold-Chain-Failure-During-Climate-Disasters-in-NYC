@@ -30,30 +30,24 @@ print("tracts loaded:", len(tracts))
 # ---------- LOAD FLOOD ZONES ----------
 
 print("Loading flood zones...")
-try:
-    # Check for GeoJSON first, then Shapefile
-    flood_geojson = DATA / "flood.geojson"
-    flood_shp = glob.glob(str(DATA / "flood_shp" / "*.shp"))
-    
-    if flood_geojson.exists():
-        flood = gpd.read_file(flood_geojson)
-    elif flood_shp:
-        flood = gpd.read_file(flood_shp[0])
-    else:
-        raise FileNotFoundError("No flood.geojson or flood_shp/*.shp found in raw_data/")
-    
-    if flood.crs != tracts.crs:
-        flood = flood.to_crs(tracts.crs)
+print("Loading flood zones...")
+flood_geojson = DATA / "flood.geojson"
+flood_shp = glob.glob(str(DATA / "flood_shp" / "*.shp"))
 
-    # Spatial join to flag tracts
-    flood_join = gpd.sjoin(tracts, flood, how="inner", predicate="intersects")
-    flooded_geoids = set(flood_join["geoid"])
-    tracts["in_flood_zone"] = tracts["geoid"].isin(flooded_geoids)
-    print(f"Tracts in flood zone: {tracts['in_flood_zone'].sum()} / {len(tracts)}")
+if flood_geojson.exists():
+    flood = gpd.read_file(flood_geojson)
+elif flood_shp:
+    flood = gpd.read_file(flood_shp[0])
+else:
+    raise FileNotFoundError("CRITICAL ERROR: No flood.geojson or flood_shp/*.shp found in raw_data/. Cannot compute risk without flood hazard layer.")
 
-except Exception as e:
-    print("Error loading flood data:", e)
-    tracts["in_flood_zone"] = False # Fallback so code doesn't crash
+if flood.crs != tracts.crs:
+    flood = flood.to_crs(tracts.crs)
+
+flood_join = gpd.sjoin(tracts, flood, how="inner", predicate="intersects")
+flooded_geoids = set(flood_join["geoid"])
+tracts["in_flood_zone"] = tracts["geoid"].isin(flooded_geoids)
+print(f"Tracts in flood zone: {tracts['in_flood_zone'].sum()} / {len(tracts)}")
 
 
 # %%
@@ -159,27 +153,42 @@ for name, row in hosp_gdf.iterrows():
 
 print("\n=== MONTE CARLO SIMULATION (1,000 runs) ===")
 np.random.seed(42)
-total_risks, flood_risks = [], []
+mc_results = [] # Store full iterations here
 
 for _ in range(1000):
+    # Sample parameters
     sim_tau = np.random.uniform(10, 14)
     sim_temp = np.random.uniform(25, 35)
     sim_frac = np.random.uniform(0.10, 0.25)
     sim_backup = np.random.uniform(0, 24)
     
+    # Calculate probabilities
     pf_in, _ = calculate_product_failure_prob(6.2, sim_tau, sim_temp, sim_backup, 3.0)
-    pf_fl, _ = calculate_product_failure_prob(72.0, sim_tau, sim_temp, 0.0, 3.0) # Flood forced 0h backup
+    pf_fl, _ = calculate_product_failure_prob(72.0, sim_tau, sim_temp, 0.0, 3.0)
     
     sim_patients = tracts["est_cancer_patients"] * sim_frac
     
-    total_risks.append((pf_in * sim_patients[~tracts["in_flood_zone"]].sum()) + (pf_fl * sim_patients[tracts["in_flood_zone"]].sum()))
-    flood_risks.append(pf_fl * sim_patients[tracts["in_flood_zone"]].sum())
+    total_risk = (pf_in * sim_patients[~tracts["in_flood_zone"]].sum()) + (pf_fl * sim_patients[tracts["in_flood_zone"]].sum())
+    flood_risk = pf_fl * sim_patients[tracts["in_flood_zone"]].sum()
+    
+    # Save everything for auditing
+    mc_results.append({
+        "Simulation": _ + 1,
+        "Sampled_Tau_Fridge_hr": round(sim_tau, 2),
+        "Sampled_Temp_C": round(sim_temp, 2),
+        "Sampled_Treatment_Fraction": round(sim_frac, 3),
+        "Sampled_Backup_hr": round(sim_backup, 2),
+        "Prob_Failure_Inland": round(pf_in, 3),
+        "Prob_Failure_Flood": round(pf_fl, 3),
+        "Total_Risk": round(total_risk, 0),
+        "Flood_Risk": round(flood_risk, 0)
+    })
 
-# Save MC results to CSV as requested by reviewer
-mc_df = pd.DataFrame({"Total_Risk": total_risks, "Flood_Risk": flood_risks})
+# Save MC results to CSV
+mc_df = pd.DataFrame(mc_results)
 mc_df.to_csv(FIGURES / "monte_carlo_results.csv", index=False)
 
-print(f"Monte Carlo 95% CI: [{np.percentile(total_risks, 2.5):.0f}, {np.percentile(total_risks, 97.5):.0f}]")
+print(f"Monte Carlo 95% CI (Total Risk): [{np.percentile(mc_df['Total_Risk'], 2.5):.0f}, {np.percentile(mc_df['Total_Risk'], 97.5):.0f}]")
 print("Saved figures/monte_carlo_results.csv")
 
 
