@@ -1,0 +1,7 @@
+Variable,Low_Value,Baseline_Value,High_Value,Low_Risk,High_Risk,Range
+Outdoor Temp (25C to 35C),25.0,30.0,35.0,30427,31977,1549
+Fridge Insulation Tau (10h to 14h),10.0,12.0,14.0,32395,30291,2103
+Flood Outage Mean (24h to 120h),24.0,72.0,120.0,28855,31563,2708
+Inland Backup Power (0h to 24h),0.0,12.0,24.0,31324,17609,13714
+Inland Outage Mean (2h to 12h),2.0,6.2,12.0,19518,41892,22373
+Treatment Fraction (10% to 25%),0.1,0.175,0.25,20883,52207,31324

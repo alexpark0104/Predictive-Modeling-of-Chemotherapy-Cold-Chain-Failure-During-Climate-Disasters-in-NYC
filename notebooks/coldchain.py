@@ -206,7 +206,13 @@ print("saved figures/final_risk_map.png")
 # %%
 # Tornado Plot
 # Baseline values
-base_risk = 31324  # From previous run
+# 1. Dynamic Baseline Calculation
+base_pf_in, _ = calculate_product_failure_prob(6.2, 12.0, 30.0, 0.0, 3.0)
+base_pf_fl, _ = calculate_product_failure_prob(72.0, 12.0, 30.0, 0.0, 3.0)
+base_pats = tracts["est_cancer_patients"] * 0.15
+base_risk = (base_pf_in * base_pats[~tracts["in_flood_zone"]].sum()) + (base_pf_fl * base_pats[tracts["in_flood_zone"]].sum())
+
+print(f"Calculated Dynamic Baseline Risk: {int(base_risk)}")
 
 # Define the ranges for each variable
 variables = {
@@ -221,7 +227,6 @@ variables = {
 results = []
 
 for name, vals in variables.items():
-    # We will calculate the risk at the low and high extremes
     low_val, mid_val, high_val = vals[list(vals.keys())[0]]
     
     # Defaults
@@ -256,13 +261,18 @@ for name, vals in variables.items():
 
     results.append({
         "Variable": name,
-        "Low_Risk": risk_low,
-        "High_Risk": risk_high,
-        "Range": abs(risk_high - risk_low)
+        "Low_Value": low_val,
+        "Baseline_Value": mid_val,
+        "High_Value": high_val,
+        "Low_Risk": int(risk_low),
+        "High_Risk": int(risk_high),
+        "Range": int(abs(risk_high - risk_low))
     })
 
-# Sort by impact
+# Save results to CSV for auditability
 results_df = pd.DataFrame(results).sort_values("Range", ascending=True)
+results_df.to_csv(FIGURES / "sensitivity_results.csv", index=False)
+print("Saved figures/sensitivity_results.csv")
 
 # Plot Tornado
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -270,9 +280,9 @@ for i, row in results_df.iterrows():
     ax.barh(row["Variable"], row["Low_Risk"] - base_risk, left=base_risk, color="blue", alpha=0.6, label="Low Bound" if i == 0 else "")
     ax.barh(row["Variable"], row["High_Risk"] - base_risk, left=base_risk, color="red", alpha=0.6, label="High Bound" if i == 0 else "")
 
-ax.axvline(base_risk, color="black", linestyle="--", label="Baseline Risk")
+ax.axvline(base_risk, color="black", linestyle="--", label=f"Baseline Risk ({int(base_risk)})")
 ax.set_xlabel("Estimated Patient-Equivalents at Risk")
-ax.set_title("Global Sensitivity Analysis (Tornado Plot)")
+ax.set_title("One-Way (OAT) Sensitivity Analysis")
 ax.legend()
 plt.tight_layout()
 plt.savefig(FIGURES / "sensitivity_tornado.png", dpi=150)
