@@ -20,16 +20,15 @@ print("coldchain.py — starting")
 
 
 # %%
-# ---------- LOAD MASTER DATA ----------
+# Load data
 
 tracts = gpd.read_file(DATA / "tracts_full.geojson")
 print("tracts loaded:", len(tracts))
 
 
 # %%
-# ---------- LOAD FLOOD ZONES ----------
+# Load flood zones
 
-print("Loading flood zones...")
 flood_geojson = DATA / "flood.geojson"
 flood_shp = glob.glob(str(DATA / "flood_shp" / "*.shp"))
 
@@ -50,7 +49,7 @@ print(f"Tracts in flood zone: {tracts['in_flood_zone'].sum()} / {len(tracts)}")
 
 
 # %%
-# ---------- UNIFIED FAILURE FUNCTION ----------
+# Unified Failure Function
 
 def calculate_product_failure_prob(mean_outage_hrs, tau_fridge_hr=12.0, T_outdoor=30.0, backup_hrs=0.0, drug_stability_hrs=3.0):
     """Calculates probability that outage exceeds both fridge breach AND drug survival time."""
@@ -80,7 +79,7 @@ def calculate_product_failure_prob(mean_outage_hrs, tau_fridge_hr=12.0, T_outdoo
 
 
 # %%
-# ---------- 1. BASELINE SCENARIO ----------
+# 1. Baseline Scenario
 
 print("\n=== BASELINE SCENARIO (Trastuzumab - 3hr stability) ===")
 tracts["chemo_survivor_equivalents"] = tracts["est_cancer_patients"] * 0.15
@@ -93,7 +92,7 @@ print(f"Baseline patient-equivalents at risk: {int(tracts['baseline_risk'].sum()
 
 
 # %%
-# ---------- 2. FLOOD ZONE CALCULATION ----------
+# 2. Flood Zone Calculation
 
 print("\n=== FLOOD ZONE CALCULATION ===")
 prob_flood, _ = calculate_product_failure_prob(mean_outage_hrs=72.0, backup_hrs=0.0, drug_stability_hrs=3.0)
@@ -110,7 +109,7 @@ print(f"Total climate-adjusted patient-equivalents at risk: {int(tracts['climate
 
 
 # %%
-# ---------- 3. SANDY PLAUSIBILITY CHECK ----------
+# 3. Sandy Plausability Check
 
 print("\n=== SANDY SPATIAL PLAUSIBILITY CHECK ===")
 hospitals = {
@@ -148,7 +147,7 @@ for name, row in hosp_gdf.iterrows():
 
 
 # %%
-# ---------- 4. MONTE CARLO SIMULATION ----------
+# Monte Carlo Simulation
 
 print("\n=== MONTE CARLO SIMULATION (1,000 runs) ===")
 np.random.seed(42)
@@ -192,7 +191,7 @@ print("Saved figures/monte_carlo_results.csv")
 
 
 # %%
-# ---------- 5. VISUALIZATION ----------
+# Visualization
 
 fig, ax = plt.subplots(figsize=(10, 10))
 tracts.plot(column="climate_risk", cmap="Reds", legend=True, ax=ax, edgecolor="black", linewidth=0.2)
@@ -203,3 +202,78 @@ ax.set_axis_off()
 plt.savefig(FIGURES / "final_risk_map.png", dpi=150, bbox_inches="tight")
 plt.close()
 print("saved figures/final_risk_map.png")
+
+# %%
+# Tornado Plot
+# Baseline values
+base_risk = 31324  # From previous run
+
+# Define the ranges for each variable
+variables = {
+    "Flood Outage Mean (24h to 120h)": {"mean_flood": [24, 72, 120], "param": "mean_flood"},
+    "Inland Outage Mean (2h to 12h)": {"mean_inland": [2, 6.2, 12], "param": "mean_inland"},
+    "Inland Backup Power (0h to 24h)": {"backup": [0, 12, 24], "param": "backup"},
+    "Fridge Insulation Tau (10h to 14h)": {"tau": [10, 12, 14], "param": "tau"},
+    "Treatment Fraction (10% to 25%)": {"frac": [0.10, 0.175, 0.25], "param": "frac"},
+    "Outdoor Temp (25C to 35C)": {"temp": [25, 30, 35], "param": "temp"}
+}
+
+results = []
+
+for name, vals in variables.items():
+    # We will calculate the risk at the low and high extremes
+    low_val, mid_val, high_val = vals[list(vals.keys())[0]]
+    
+    # Defaults
+    m_flood, m_inland, bck, tau, frac, temp = 72.0, 6.2, 0.0, 12.0, 0.15, 30.0
+    
+    # Low Scenario
+    if "mean_flood" in vals: m_flood = low_val
+    if "mean_inland" in vals: m_inland = low_val
+    if "backup" in vals: bck = low_val
+    if "tau" in vals: tau = low_val
+    if "frac" in vals: frac = low_val
+    if "temp" in vals: temp = low_val
+    
+    pf_in, _ = calculate_product_failure_prob(m_inland, tau, temp, bck, 3.0)
+    pf_fl, _ = calculate_product_failure_prob(m_flood, tau, temp, 0.0, 3.0)
+    pats = tracts["est_cancer_patients"] * frac
+    risk_low = (pf_in * pats[~tracts["in_flood_zone"]].sum()) + (pf_fl * pats[tracts["in_flood_zone"]].sum())
+
+    # High Scenario
+    m_flood, m_inland, bck, tau, frac, temp = 72.0, 6.2, 0.0, 12.0, 0.15, 30.0
+    if "mean_flood" in vals: m_flood = high_val
+    if "mean_inland" in vals: m_inland = high_val
+    if "backup" in vals: bck = high_val
+    if "tau" in vals: tau = high_val
+    if "frac" in vals: frac = high_val
+    if "temp" in vals: temp = high_val
+    
+    pf_in, _ = calculate_product_failure_prob(m_inland, tau, temp, bck, 3.0)
+    pf_fl, _ = calculate_product_failure_prob(m_flood, tau, temp, 0.0, 3.0)
+    pats = tracts["est_cancer_patients"] * frac
+    risk_high = (pf_in * pats[~tracts["in_flood_zone"]].sum()) + (pf_fl * pats[tracts["in_flood_zone"]].sum())
+
+    results.append({
+        "Variable": name,
+        "Low_Risk": risk_low,
+        "High_Risk": risk_high,
+        "Range": abs(risk_high - risk_low)
+    })
+
+# Sort by impact
+results_df = pd.DataFrame(results).sort_values("Range", ascending=True)
+
+# Plot Tornado
+fig, ax = plt.subplots(figsize=(10, 6))
+for i, row in results_df.iterrows():
+    ax.barh(row["Variable"], row["Low_Risk"] - base_risk, left=base_risk, color="blue", alpha=0.6, label="Low Bound" if i == 0 else "")
+    ax.barh(row["Variable"], row["High_Risk"] - base_risk, left=base_risk, color="red", alpha=0.6, label="High Bound" if i == 0 else "")
+
+ax.axvline(base_risk, color="black", linestyle="--", label="Baseline Risk")
+ax.set_xlabel("Estimated Patient-Equivalents at Risk")
+ax.set_title("Global Sensitivity Analysis (Tornado Plot)")
+ax.legend()
+plt.tight_layout()
+plt.savefig(FIGURES / "sensitivity_tornado.png", dpi=150)
+print("saved figures/sensitivity_tornado.png")
