@@ -1,65 +1,50 @@
 # Predictive Modeling of Chemotherapy Cold-Chain Failure During Climate Disasters in New York City
 
 ## Overview
-This repository contains a multi-hazard, physics-based computational model I built to predict census-tract-level risks of chemotherapy cold-chain failure during climate disasters in New York City. 
+This repository contains a multi-hazard, physics-based computational model I built to generate **scenario-based patient-equivalent exposure estimates** for chemotherapy cold-chain failure during climate disasters in New York City. 
 
-While traditional disaster planning maps physical hazards, my model maps **biological and infrastructural failure**. It calculates the time required for a pharmacy refrigerator to breach the 8°C safety threshold, adds the specific biological degradation time of the drug, and models the probability of power outages overwhelming hospital backup generators.
+*Note: This repository does not predict observed spoiled doses. It estimates the scale of potential exposure using demographic proxies.*
 
 ## Core Methodology
 I compute risk using the following formula:
-`ColdChainRisk = P(outage > total_time_to_failure) × active_chemo_patients_proxy`
+`ColdChainRisk = P(outage > total_time_to_failure) × chemo_survivor_equivalents`
 
-1. **Thermal Physics:** I used a lumped-capacitance thermal model calibrated to NIST data to calculate how fast a pharmacy fridge warms up during a blackout.
-2. **Biological Constraints:** I integrated drug-specific stability data from the STABILIS database. Because drugs degrade at different rates, the model calculates `total_time_to_failure = time_to_8C + drug_survival_time`. (e.g., Trastuzumab survives only 3 hours at room temp, while Rituximab survives 15 days).
-3. **Probabilistic Hazard:** I applied lognormal distributions of power outage durations based on ConEd CAIDI data (6.2h mean for inland blackouts, 72h mean for hurricane flood zones).
-4. **Geospatial Vulnerability:** I integrated the CDC Social Vulnerability Index (SVI), PLACES cancer prevalence, Census ACS adult population, and NYC Open Data Sandy Inundation Zones.
-5. **Monte Carlo Simulation:** I ran a 1,000-iteration simulation (using a fixed seed of `42` for reproducibility) drawing from uniform distributions for fridge insulation (10–14h), outdoor temperature (25–35°C), and inland backup power (0–24h). For tracts intersecting the flood zone, backup power is forced to 0h to simulate flooded generator basements.
-
----
+1. **Unified Failure Function:** `total_time_to_failure` is calculated by combining the time for a pharmacy fridge to breach 8°C (lumped-capacitance thermal model) with the specific biological degradation time of the drug (e.g., Trastuzumab degrades in 3 hours at room temp).
+2. **Probabilistic Hazard:** I applied lognormal distributions of power outage durations (6.2h mean inland, 72h mean for flood zones).
+3. **Geospatial Vulnerability:** I integrated the CDC Social Vulnerability Index (SVI), PLACES cancer prevalence, Census ACS adult population, and NYC Open Data Sandy Inundation Zones.
+4. **Monte Carlo Simulation:** I ran a 1,000-iteration simulation (seed = `42`) drawing from uniform distributions for fridge insulation (10–14h), outdoor temperature (25–35°C), and inland backup power (0–24h). Flood-zone tracts are forced to 0h backup (simulating flooded basements).
 
 ## EXPLICIT ASSUMPTIONS & LIMITATIONS
 
-This model is an academic screening tool, **not an operational pharmacy-control system**. 
+### 1. Patient-Equivalent Proxies
+*   **Limitation:** The output represents **estimated cancer-survivor-equivalents**, not active infusion patients. I multiplied CDC PLACES prevalence (ever-diagnosed) by a 15% treatment fraction to approximate the denominator.
 
-### 1. Proxy Estimates (Patient-Equivalents)
-*   **Limitation:** The output `ColdChainRisk` represents **estimated patient-equivalents**, not confirmed spoiled vials or documented treatment interruptions. I used CDC PLACES data (ever-diagnosed cancer survivors) and multiplied by a 15% treatment fraction (bounded 10–25%) to approximate active infusion patients.
+### 2. Facility vs. Tract Exposure (Ecological Fallacy)
+*   **Limitation:** Flood exposure is assigned at the census-tract level. This conflates patient residence, pharmacy location, and generator elevation. The model assumes all flooded generators fail and all non-flooded facilities share one inland outage distribution.
 
-### 2. No Primary Survey Data
-*   **Limitation:** Because I could not obtain survey data from NYC infusion centers, I used a Monte Carlo simulation to randomly vary backup power from 0 to 24 hours for inland facilities. This provides a confidence interval, not a point estimate.
-
-### 3. The Physics of the Fridge
-*   **Limitation:** I used a first-order lumped-capacitance thermal model. It assumes the door remains closed and does not account for thermal ballast. 
+### 3. Spatial Plausibility Check (Not Validation)
+*   **Limitation:** I performed a **retrospective spatial plausibility check** against Hurricane Sandy, not a full validation. Because observed temperature logs and spoiled-dose records are unavailable, I did not report predictive accuracy. The model dynamically calculates a ~99.6% failure probability for the tracts containing NYU Langone, Bellevue, and Coney Island Hospital, compared to ~66.6% for inland control hospitals. This confirms the model correctly identifies high-hazard coastal infrastructure, but does not confirm exact physical failure counts.
 
 ### 4. Qualified Winter Conclusion
-*   **Limitation:** The model shows near-zero cold-chain failure during winter storms. **This assumes building heating remains functional or ambient indoor temperatures do not drop below 8°C.** In a total heating failure during a blizzard, indoor temperatures could drop below freezing, causing physical disruption to the drug vials (cracking), which this thermal model does not capture.
-
-### 5. Retrospective Spatial Plausibility Check (Sandy)
-*   **Limitation:** I backtested the model against Hurricane Sandy (2012). Because historical data on exact spoiled chemotherapy doses is unavailable, **this is a spatial plausibility check, not an observed-count validation**. The model successfully assigned a 99.6% failure probability to the tracts containing NYU Langone, Bellevue, and Coney Island Hospital (which suffered catastrophic generator failures), compared to 66.6% for inland control hospitals (Mount Sinai, Montefiore).
-
----
+*   **Limitation:** The model shows near-zero cold-chain failure during winter storms. This assumes indoor ambient temperatures do not drop below 8°C. A total heating failure during a blizzard could freeze and crack vials, which this thermal model does not capture.
 
 ## Expected Output Files
-Running `coldchain.py` and `explore.py` will generate the following files in the `figures/` directory:
-*   `svi_map_clean.png`: NYC Social Vulnerability Index with reconstructed tract hatching.
-*   `cancer_map.png`: Cancer prevalence by census tract.
-*   `coldchain_risk_baseline.png`: Baseline cold-chain risk during a standard summer blackout.
-*   `coldchain_risk_flood.png`: Risk map overlaid with the Sandy flood inundation zones.
-*   `monte_carlo_sensitivity.png`: Histogram of 1,000 simulation runs.
+*   `figures/final_risk_map.png`: Risk map overlaid with the Sandy flood inundation zones.
+*   `figures/monte_carlo_results.csv`: Machine-readable 1,000-iteration simulation output (Total_Risk and Flood_Risk columns).
+*   `figures/svi_map_clean.png`: NYC Social Vulnerability Index.
 
-## Setup & Reproducibility
-1. Clone the repo.
-2. Ensure you have Python 3.10+ installed.
-3. Create a virtual environment: `python3 -m venv .venv`
-4. Activate it: `source .venv/bin/activate`
-5. Install dependencies: `pip install -r requirements.txt`
-6. Download the raw data into a `raw_data/` folder (See Data Sources below, as files exceed GitHub limits).
-7. Run `python notebooks/explore.py`
-8. Run `python notebooks/coldchain.py`
+## Reproducibility & Data Provenance
+To reproduce this pipeline from a fresh clone, download the following datasets into a `raw_data/` folder:
 
-## Data Sources & Versions
-*   **CDC SVI 2022:** [Download Link](https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html) (Census Tract level).
-*   **CDC PLACES 2024:** [Download Link](https://chronicdata.cdc.gov/500-Cities-Places/PLACES-Local-Data-for-Better-Health-Census-Tract-D/ai6z-tcin) (Crude prevalence).
-*   **US Census ACS 2024:** [Download Link](https://data.census.gov) (Table B01001 - Sex by Age).
-*   **NYC Open Data:** [Sandy Inundation Zones](https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5).
-*   **STABILIS Database:** [Drug Stability Data](https://www.stabilis.org).
-*   **NY DPS:** [ConEd Reliability Reports](https://documents.dps.ny.gov).
+| Dataset | Source / Version | Expected Filename | Rows | CRS |
+| :--- | :--- | :--- | :--- | :--- |
+| NYC Census Tracts | NYC Open Data (2020) | `2020_Census_Tracts.geojson` | 2,325 | EPSG:4326 |
+| CDC SVI | CDC 2022 (NY, Tract) | `svi_ny_tract_2022.csv` | 5,394 | N/A |
+| CDC PLACES | CDC 2024 (Crude Prev) | `places_nyc_full.csv` | ~3.1M | N/A |
+| ACS Population | Census 2024 (B01001) | `acs_b01001_ny_tracts.csv` | 5,397 | N/A |
+| Sandy Flood Zones | NYC Open Data | `flood.geojson` | 588 tracts | EPSG:4326 |
+
+1. `python3 -m venv .venv && source .venv/bin/activate`
+2. `pip install -r requirements.txt`
+3. `python notebooks/explore.py` (Builds `raw_data/tracts_full.geojson`)
+4. `python notebooks/coldchain.py` (Runs thermal model, Monte Carlo, and plausibility check)
