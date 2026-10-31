@@ -155,9 +155,7 @@ The modeling script then loads that file, applies the flood-zone layer, runs the
 1. Agency for Toxic Substances and Disease Registry. (2022). *Social Vulnerability Index.* https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html
 2. Centers for Disease Control and Prevention. (2024). *PLACES: Local Data for Better Health, Census Tract Data.* https://chronicdata.cdc.gov/500-Cities-Places/PLACES-Local-Data-for-Better-Health-Census-Tract-D/ai6z-tcin
 3. U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates, Table B01001.* https://data.census.gov
-4. National Institute of Standards and Technology. *Thermal modeling and measurement resources.* https://www.nist.gov
+4. National Institute of Standards and Technology. (2009). *Thermal Analysis of Refrigeration Systems Used for Vaccine Storage* (NISTIR 7656). Chojnacky, M., Miller, W., Ripple, D., & Strouse, G. U.S. Department of Commerce. https://doi.org/10.6028/NIST.IR.7656
 5. French Society of Oncology Pharmacy. *STABILIS Drug Stability Database.* https://www.stabilis.org
 6. NYC Open Data. *Sandy Inundation Zones.* https://data.cityofnewyork.us/Environment/Sandy-Inundation-Zone/uyj8-7rv5
-7. New York Department of Public Service. *Con Edison reliability and outage reports.* https://documents.dps.ny.gov
-
-Before final submission, replace the general NIST and New York Department of Public Service landing pages with the exact reports or records used to select the thermal and outage parameters.
+7. New York State Department of Public Service. (2023). *2022 Electric Service Reliability Report* (Case 23-E-0225). Con Edison Network System CAIDI: 6.23 hours. https://pl.dps.ny.gov/system/files/documents/2023/08/electric-service-reliability-report-2022.pdf
