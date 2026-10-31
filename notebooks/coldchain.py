@@ -287,3 +287,258 @@ ax.legend()
 plt.tight_layout()
 plt.savefig(FIGURES / "sensitivity_tornado.png", dpi=150)
 print("saved figures/sensitivity_tornado.png")
+
+# %%
+patient_equivalents = (
+    tracts["chemo_survivor_equivalents"]
+    .fillna(0)
+    .astype(float)
+)
+
+flood_mask = (
+    tracts["in_flood_zone"]
+    .fillna(False)
+    .astype(bool)
+)
+
+# 1. Naive GIS flood baseline:
+# Every patient-equivalent in a flood-zone tract is assumed exposed.
+# Non-flooded tracts are excluded from this flood-only comparison.
+naive_flood_risk = np.where(
+    flood_mask,
+    patient_equivalents,
+    0.0
+)
+
+# 2. Physics-based flood model:
+# Uses the modeled flood-zone probability, including refrigerator
+# breach time and the 3-hour trastuzumab stability window.
+physics_flood_risk = np.where(
+    flood_mask,
+    prob_flood * patient_equivalents,
+    0.0
+)
+
+naive_flood_total = naive_flood_risk.sum()
+physics_flood_total = physics_flood_risk.sum()
+
+difference = naive_flood_total - physics_flood_total
+percent_reduction = (
+    difference / naive_flood_total * 100
+    if naive_flood_total > 0
+    else np.nan
+)
+
+print("\n=== BASELINE COMPARISON: FLOOD-ZONE TRACTS ONLY ===")
+print(
+    f"Naive GIS baseline: "
+    f"{naive_flood_total:,.0f} patient-equivalents"
+)
+print(
+    f"Physics-based model: "
+    f"{physics_flood_total:,.0f} patient-equivalents"
+)
+print(
+    f"Difference: "
+    f"{difference:,.0f} patient-equivalents"
+)
+print(
+    f"Relative reduction in modeled exposure: "
+    f"{percent_reduction:.1f}%"
+)
+
+print(
+    "\nInterpretation: The naive GIS baseline assumes immediate "
+    "failure for every patient-equivalent in a flood-zone tract. "
+    "The physics-based estimate incorporates the modeled outage "
+    "distribution, refrigerator thermal delay, and trastuzumab "
+    "stability window."
+)
+# &&
+#Citywide Comparison 
+# Naive assumption: immediate failure everywhere in NYC.
+naive_citywide_risk = patient_equivalents.sum()
+physics_citywide_risk = tracts["climate_risk"].fillna(0).sum()
+
+citywide_difference = naive_citywide_risk - physics_citywide_risk
+citywide_reduction = (
+    citywide_difference / naive_citywide_risk * 100
+    if naive_citywide_risk > 0
+    else np.nan
+)
+
+print("\n=== BASELINE COMPARISON: CITYWIDE ===")
+print(f"Naive immediate-failure baseline: {naive_citywide_risk:,.0f}")
+print(f"Physics-based scenario estimate: {physics_citywide_risk:,.0f}")
+print(f"Difference: {citywide_difference:,.0f}")
+print(f"Relative reduction: {citywide_reduction:.1f}%")
+
+# %%
+# Decision Rule
+# Calculate baseline inland risk (0 hours backup)
+pf_in_base, _ = calculate_product_failure_prob(6.2, 12.0, 30.0, 0.0, 3.0)
+inland_patients = tracts.loc[~tracts["in_flood_zone"], "chemo_survivor_equivalents"].sum()
+base_inland_risk = pf_in_base * inland_patients
+
+targets = [0.25, 0.50, 0.75]
+thresholds = {}
+
+print(f"Baseline Inland Risk (0h backup): {int(base_inland_risk):,} patients\n")
+
+for backup_hrs in range(1, 25): # Test 1 to 24 hours of backup
+    # Calculate new probability with this backup
+    pf_in_new, _ = calculate_product_failure_prob(6.2, 12.0, 30.0, backup_hrs, 3.0)
+    new_risk = pf_in_new * inland_patients
+    
+    # Calculate reduction
+    reduction = (base_inland_risk - new_risk) / base_inland_risk
+    
+    for target in targets:
+        if reduction >= target and target not in thresholds:
+            thresholds[target] = backup_hrs
+
+for target in targets:
+    backup_hrs = thresholds.get(target)
+
+    if backup_hrs is None:
+        print(
+            f"  -> {target:.0%} reduction requires "
+            "more than 24 hours of backup power"
+        )
+        continue
+
+    # Recalculate the actual result for the selected threshold
+    pf_at_threshold, _ = calculate_product_failure_prob(
+        mean_outage_hrs=6.2,
+        tau_fridge_hr=12.0,
+        T_outdoor=30.0,
+        backup_hrs=backup_hrs,
+        drug_stability_hrs=3.0
+    )
+
+    risk_at_threshold = pf_at_threshold * inland_patients
+
+    achieved_reduction = (
+        (base_inland_risk - risk_at_threshold)
+        / base_inland_risk
+        if base_inland_risk > 0
+        else 0.0
+    )
+
+    print(
+        f"  -> {target:.0%} reduction requires "
+        f"{backup_hrs} hours of backup power "
+        f"(achieved: {achieved_reduction:.1%}; "
+        f"estimated risk: {risk_at_threshold:,.0f})"
+    )
+# %%
+# Three Model Comparison 
+patient_equivalents = (
+    tracts["chemo_survivor_equivalents"]
+    .fillna(0)
+    .astype(float)
+)
+
+flood_mask = (
+    tracts["in_flood_zone"]
+    .fillna(False)
+    .astype(bool)
+)
+
+# 1. Native GIS Flooding Only Baseline
+# Assumes every patient-equivalent in a flood-zone tract is immediately exposed.
+
+naive_flood_risk = np.where(
+    flood_mask,
+    patient_equivalents,
+    0.0
+)
+
+naive_flood_total = naive_flood_risk.sum()
+
+# 2. Thermal Only Model
+# Includes refrigerator thermal delay but excludes the
+# additional 3-hour trastuzumab stability window.
+
+pf_thermal_in, _ = calculate_product_failure_prob(
+    mean_outage_hrs=6.2,
+    tau_fridge_hr=12.0,
+    T_outdoor=30.0,
+    backup_hrs=0.0,
+    drug_stability_hrs=0.0
+)
+
+pf_thermal_flood, _ = calculate_product_failure_prob(
+    mean_outage_hrs=72.0,
+    tau_fridge_hr=12.0,
+    T_outdoor=30.0,
+    backup_hrs=0.0,
+    drug_stability_hrs=0.0
+)
+
+thermal_only_risk = np.where(
+    flood_mask,
+    pf_thermal_flood * patient_equivalents,
+    pf_thermal_in * patient_equivalents
+)
+
+thermal_only_total = thermal_only_risk.sum()
+thermal_only_flood_total = thermal_only_risk[flood_mask].sum()
+
+# 3. Full time to failure model
+# Includes refrigerator thermal delay plus the 3-hour
+# trastuzumab stability window.
+
+tto_risk = tracts["climate_risk"].fillna(0)
+tto_total = tto_risk.sum()
+tto_flood_total = tto_risk[flood_mask].sum()
+
+# Flood only comparison
+
+print("\n=== FLOOD-ZONE COMPARISON ===")
+print(
+    f"1. Naive GIS immediate-failure baseline: "
+    f"{naive_flood_total:,.0f}"
+)
+print(
+    f"2. Thermal-only model: "
+    f"{thermal_only_flood_total:,.0f}"
+)
+print(
+    f"3. Full time-to-failure model: "
+    f"{tto_flood_total:,.0f}"
+)
+
+# Citywide Comparison
+
+# For a citywide immediate-failure upper bound, every
+# patient-equivalent is assumed immediately exposed.
+naive_citywide_total = patient_equivalents.sum()
+
+print("\n=== CITYWIDE COMPARISON ===")
+print(
+    f"1. Naive citywide immediate-failure upper bound: "
+    f"{naive_citywide_total:,.0f}"
+)
+print(
+    f"2. Thermal-only model: "
+    f"{thermal_only_total:,.0f}"
+)
+print(
+    f"3. Full time-to-failure model: "
+    f"{tto_total:,.0f}"
+)
+
+print("\n=== MODEL DIFFERENCES ===")
+print(
+    "Thermal-only reduction versus naive citywide baseline: "
+    f"{naive_citywide_total - thermal_only_total:,.0f}"
+)
+print(
+    "Full time-to-failure reduction versus thermal-only model: "
+    f"{thermal_only_total - tto_total:,.0f}"
+)
+print(
+    "Full time-to-failure reduction versus naive citywide baseline: "
+    f"{naive_citywide_total - tto_total:,.0f}"
+)
