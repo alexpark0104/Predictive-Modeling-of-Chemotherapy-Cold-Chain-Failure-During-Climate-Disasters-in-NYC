@@ -12,7 +12,7 @@ The individual methods used in this study—geographic information systems, ther
 
 This project estimates scenario-based exposure. It does not predict observed spoiled doses, document treatment interruptions, or validate physical failure counts.
 
-## Methodology and Independence
+## Methodology 
 
 - **Data engineering and pipeline:** I independently cleaned and merged CDC Social Vulnerability Index, CDC PLACES, American Community Survey, and NYC Open Data datasets using Python, GeoPandas, and Pandas.
 - **Thermal and biological modeling:** I wrote the unified failure function combining a refrigerator thermal model with the selected trastuzumab stability assumption.
