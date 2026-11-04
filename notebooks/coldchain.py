@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import os
 import glob
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
 
 # Dynamically find the project root (works on any machine)
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,7 +49,34 @@ flooded_geoids = set(flood_join["geoid"])
 tracts["in_flood_zone"] = tracts["geoid"].isin(flooded_geoids)
 print(f"Tracts in flood zone: {tracts['in_flood_zone'].sum()} / {len(tracts)}")
 
+# %%
+#Geocode Hospitals
+hosp_raw = pd.read_csv(DATA / "ny_hospitals.csv")
 
+# Filter to NYC counties
+nyc_counties = ["Bronx", "Kings", "New York", "Queens", "Richmond"]
+hosp_nyc = hosp_raw[hosp_raw["Facility County"].isin(nyc_counties)].copy()
+
+# Filter to actual acute-care hospitals
+hosp_nyc = hosp_nyc[
+    (hosp_nyc["Description"] == "Hospital") |
+    (hosp_nyc["Description"] == "Off-Campus Emergency Department")
+].copy()
+
+print(f"NYC acute-care hospitals found: {len(hosp_nyc)}")
+
+# Convert to GeoDataFrame using the existing coordinates
+hospitals_geo = gpd.GeoDataFrame(
+    hosp_nyc,
+    geometry=gpd.points_from_xy(hosp_nyc["Facility Longitude"], hosp_nyc["Facility Latitude"]),
+    crs="EPSG:4326"
+)
+
+if hospitals_geo.crs != tracts.crs:
+    hospitals_geo = hospitals_geo.to_crs(tracts.crs)
+
+print(f"Hospitals loaded into GeoDataFrame: {len(hospitals_geo)}")
+print(f"Sample: {hospitals_geo['Facility Name'].head(3).tolist()}")
 # %%
 # Unified Failure Function
 
@@ -189,19 +218,73 @@ mc_df.to_csv(FIGURES / "monte_carlo_results.csv", index=False)
 print(f"Monte Carlo 95% CI (Total Risk): [{np.percentile(mc_df['Total_Risk'], 2.5):.0f}, {np.percentile(mc_df['Total_Risk'], 97.5):.0f}]")
 print("Saved figures/monte_carlo_results.csv")
 
+# %% 
+# Spatial join: put hospitals into tracts
+hospitals_with_tracts = gpd.sjoin(
+    hospitals_geo,
+    tracts[["geoid", "boroname", "climate_risk", "in_flood_zone", "geometry"]],
+    how="left",
+    predicate="intersects"
+)
 
+print(f"Total acute-care hospitals: {len(hospitals_with_tracts)}")
+print(f"Hospitals matched to tracts: {hospitals_with_tracts['geoid'].notna().sum()}")
+
+# How many are in flood zones?
+flooded_hospitals = hospitals_with_tracts[hospitals_with_tracts["in_flood_zone"] == True]
+print(f"\nHospitals in flood zones: {len(flooded_hospitals)} / {len(hospitals_with_tracts)} ({len(flooded_hospitals)/len(hospitals_with_tracts)*100:.1f}%)")
+
+# How many are in high-risk tracts (top 25%)?
+high_risk_threshold = tracts["climate_risk"].quantile(0.75)
+high_risk_hospitals = hospitals_with_tracts[hospitals_with_tracts["climate_risk"] > high_risk_threshold]
+print(f"Hospitals in top 25% risk tracts: {len(high_risk_hospitals)} / {len(hospitals_with_tracts)}")
+
+# How many are in the top 10% risk tracts (highest vulnerability)?
+top_10_threshold = tracts["climate_risk"].quantile(0.90)
+top_10_hospitals = hospitals_with_tracts[hospitals_with_tracts["climate_risk"] > top_10_threshold]
+print(f"Hospitals in top 10% risk tracts: {len(top_10_hospitals)} / {len(hospitals_with_tracts)}")
+
+# List the most vulnerable hospitals
+print("\n=== TOP 15 MOST VULNERABLE HOSPITALS (by tract risk) ===")
+top_vulnerable = hospitals_with_tracts.nlargest(15, "climate_risk")[["Facility Name", "boroname", "in_flood_zone", "climate_risk"]]
+for _, row in top_vulnerable.iterrows():
+    flood_status = "FLOODED" if row["in_flood_zone"] else "inland"
+    print(f"  {row['Facility Name'][:45]:47s} | {row['boroname']:10s} | {flood_status:8s} | risk={row['climate_risk']:.2f}")
+full_hospital_output = hospitals_with_tracts[["Facility Name", "boroname", "in_flood_zone", "climate_risk"]]
+full_hospital_output = full_hospital_output.drop_duplicates(subset=["Facility Name"])
+full_hospital_output = full_hospital_output.sort_values("climate_risk", ascending=False)
+full_hospital_output.to_csv(FIGURES / "all_hospitals_risk.csv", index=False)
+print(f"Saved full hospital list: {len(full_hospital_output)} unique facilities to figures/all_hospitals_risk.csv")
+# Save to CSV
+top_vulnerable.to_csv(FIGURES / "top_vulnerable_hospitals.csv", index=False)
+print("\nSaved figures/top_vulnerable_hospitals.csv")
 # %%
 # Visualization
 
-fig, ax = plt.subplots(figsize=(10, 10))
-tracts.plot(column="climate_risk", cmap="Reds", legend=True, ax=ax, edgecolor="black", linewidth=0.2)
+fig, ax = plt.subplots(figsize=(12, 12))
+
+# Plot tracts
+tracts.plot(column="climate_risk", cmap="Reds", legend=True, ax=ax, edgecolor="black", linewidth=0.1)
+
+# Plot flood zones
 if 'flood' in locals():
-    flood.plot(ax=ax, color="none", edgecolor="blue", linewidth=1, alpha=0.5)
-ax.set_title("Scenario-Based Cold-Chain Exposure (Patient-Equivalents)")
+    flood.plot(ax=ax, color="none", edgecolor="blue", linewidth=0.8, alpha=0.6)
+
+# Inland hospitals (green)
+hospitals_with_tracts[hospitals_with_tracts["in_flood_zone"] == False].plot(
+    ax=ax, color="green", marker="+", markersize=120, label="Inland Hospital"
+)
+
+# Flooded hospitals (purple X)
+hospitals_with_tracts[hospitals_with_tracts["in_flood_zone"] == True].plot(
+    ax=ax, color="purple", marker="X", markersize=120, label="Flood-Zone Hospital"
+)
+
+ax.set_title("NYC Hospital Exposure to Cold-Chain Failure Risk\n(Blue outline = Sandy Flood Zone)")
 ax.set_axis_off()
-plt.savefig(FIGURES / "final_risk_map.png", dpi=150, bbox_inches="tight")
-plt.close()
-print("saved figures/final_risk_map.png")
+ax.legend(loc="lower right", fontsize=12)
+plt.savefig(FIGURES / "hospital_exposure_map.png", dpi=150)
+print("saved figures/hospital_exposure_map.png")
 
 # %%
 # Tornado Plot
