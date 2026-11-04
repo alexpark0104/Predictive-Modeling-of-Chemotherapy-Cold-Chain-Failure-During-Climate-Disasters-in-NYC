@@ -13,13 +13,13 @@ st.set_page_config(layout="wide", page_title="ColdChain Shield NYC")
 st.title("ColdChain Shield NYC")
 st.markdown("A decision-support dashboard for estimating Trastuzumab cold-chain exposure during climate disasters.")
 
-# Load data (handles both root and notebooks/ folder)
+# Load data
 ROOT = Path(__file__).resolve().parent
 if not (ROOT / "raw_data").exists():
     ROOT = ROOT.parent
 tracts = gpd.read_file(ROOT / "raw_data" / "tracts_full.geojson")
 
-# Load Flood Zones (Quick fix)
+# Load Flood Zones
 try:
     flood_geojson = ROOT / "raw_data" / "flood.geojson"
     flood_shp = glob.glob(str(ROOT / "raw_data" / "flood_shp" / "*.shp"))
@@ -37,13 +37,11 @@ except Exception as e:
     st.error(f"Error loading flood data: {e}")
     tracts["in_flood_zone"] = False
 
-# Load Hospitals (Mr. Simon's Request)
+# Load Hospitals
 try:
     hosp_raw = pd.read_csv(ROOT / "raw_data" / "ny_hospitals.csv")
     nyc_counties = ["Bronx", "Kings", "New York", "Queens", "Richmond"]
     hosp_nyc = hosp_raw[hosp_raw["Facility County"].isin(nyc_counties)].copy()
-    
-    # Filter to acute-care hospitals
     hosp_nyc = hosp_nyc[hosp_nyc["Description"].isin(["Hospital", "Off-Campus Emergency Department"])].copy()
     hosp_nyc = hosp_nyc.dropna(subset=["Facility Latitude", "Facility Longitude"])
     
@@ -55,7 +53,7 @@ try:
     if hospitals_geo.crs != tracts.crs:
         hospitals_geo = hospitals_geo.to_crs(tracts.crs)
         
-    # Spatial join hospitals to tracts to get their flood status
+    # Spatial join hospitals to tracts
     hosp_joined = gpd.sjoin(hospitals_geo, tracts[["geoid", "in_flood_zone", "geometry"]], how="left", predicate="intersects")
 except Exception as e:
     st.error(f"Error loading hospital data: {e}")
@@ -73,6 +71,11 @@ outage_inland = st.sidebar.slider("Inland Outage Duration (hours)", 2, 24, 6)
 backup_inland = st.sidebar.slider("Inland Backup Power (hours)", 0, 24, 0)
 drug_stability = st.sidebar.slider("Drug Stability at Room Temp (hours)", 1, 24, 3)
 treatment_frac = st.sidebar.slider("Active Treatment Fraction (%)", 5, 30, 15) / 100.0
+
+st.sidebar.markdown("---")
+st.sidebar.header("Map Layers")
+show_hospitals = st.sidebar.checkbox("Show All Hospitals", value=True)
+show_at_risk_only = st.sidebar.checkbox("Show ONLY Hospitals in High Risk", value=False)
 
 # ---------- REAL PHYSICS MATH ----------
 def calculate_prob(mean_outage_hrs, backup_hrs, drug_stability_hrs):
@@ -128,25 +131,25 @@ tracts.plot(
 if 'flood' in locals():
     flood.plot(ax=ax, color="none", edgecolor="blue", linewidth=0.8, alpha=0.6)
 
-# Plot Hospitals (Mr. Simon's Request)
-if hosp_joined is not None:
-    # Inland Hospitals
-    hosp_joined[hosp_joined["in_flood_zone"] == False].plot(
-        ax=ax, color="green", marker="+", markersize=100, label="Inland Hospital"
-    )
-    # Flooded Hospitals
-    hosp_joined[hosp_joined["in_flood_zone"] == True].plot(
-        ax=ax, color="purple", marker="X", markersize=100, label="Flood-Zone Hospital"
-    )
+# Plot Hospitals conditionally based on checkboxes
+if show_hospitals and hosp_joined is not None:
+    if show_at_risk_only:
+        # Filter to only high-risk hospitals (e.g., in flood zones or high tract risk)
+        # Let's define "high risk" as in a flood zone
+        at_risk_hosp = hosp_joined[hosp_joined["in_flood_zone"] == True]
+        at_risk_hosp.plot(ax=ax, color="red", marker="X", markersize=120, label="High Risk Hospital")
+    else:
+        # Inland Hospitals
+        hosp_joined[hosp_joined["in_flood_zone"] == False].plot(
+            ax=ax, color="green", marker="+", markersize=100, label="Inland Hospital"
+        )
+        # Flooded Hospitals
+        hosp_joined[hosp_joined["in_flood_zone"] == True].plot(
+            ax=ax, color="purple", marker="X", markersize=100, label="Flood-Zone Hospital"
+        )
     ax.legend(loc="lower right", fontsize=10)
 
 ax.set_title(f"Scenario Map: Flood Outage ({outage_flood}h) vs Inland Outage ({outage_inland}h) with {backup_inland}h Backup")
 ax.set_axis_off()
 
 st.pyplot(fig)
-
-st.markdown("""
-*Note: Blue outlines represent Sandy Inundation Zones. Green crosses are inland hospitals; 
-purple X's are hospitals inside flood zones. The color scale is locked so you can see the map 
-light up or fade as you move the sliders.*
-""")
