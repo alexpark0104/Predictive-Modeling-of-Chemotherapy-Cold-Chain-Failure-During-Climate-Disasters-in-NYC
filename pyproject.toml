@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coldchain-nyc"
+version = "0.2.0.dev0"
+description = "Scenario-based model of oncology-biologic cold-chain loss during urban power outages (policy vs physics)"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
+
+[project.optional-dependencies]
+geo = ["pandas", "geopandas", "shapely", "pyproj", "matplotlib"]
+sensitivity = ["SALib"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

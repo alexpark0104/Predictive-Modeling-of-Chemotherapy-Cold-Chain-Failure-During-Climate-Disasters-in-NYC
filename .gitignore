@@ -6,3 +6,12 @@ raw_data/acs_b01001_ny_tracts.csv
 raw_data/*.geojson
 raw_data/flood_shp/
 Progress.md
+
+# v0.2 additions
+.ipynb_checkpoints/
+data/raw/
+data/interim/
+outputs/
+figures/
+.pytest_cache/
+*.egg-info/
