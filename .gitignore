@@ -15,3 +15,6 @@ outputs/
 figures/
 .pytest_cache/
 *.egg-info/
+
+# EAGLE-I raw downloads (large; never commit)
+raw_data/eaglei/
