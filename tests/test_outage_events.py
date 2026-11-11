@@ -49,3 +49,38 @@ def test_crossing_set_by_missing_rows_is_flagged():
     m = oe.decay_metrics(s, T0 + timedelta(hours=1))
     hours, from_absent = m["crossings"][0.5]
     assert abs(hours - 10.0) < 0.3 and from_absent is True
+
+
+def _storm_on_baseline(base=100, peak_excess=1000, half_life_h=6.0, pre_days=10, post_hours=120):
+    s = {}
+    start = T0 - timedelta(days=pre_days)
+    for i in range(int(pre_days * 96)):
+        s[start + i * oe.STEP] = base
+    for i in range(int(post_hours * 4)):
+        s[T0 + i * oe.STEP] = base + int(round(peak_excess * 0.5 ** ((i / 4.0) / half_life_h)))
+    return s
+
+
+def test_baseline_is_estimated_and_removed():
+    s = _storm_on_baseline()
+    m = oe.decay_metrics(s, T0 + timedelta(hours=1))
+    assert abs(m["baseline"] - 100) < 1 and m["distinguishable"]
+    raw12, adj12 = m["remaining"][12][0], m["remaining_adj"][12][0]
+    assert abs(adj12 - 0.25) < 0.01 and raw12 > adj12 + 0.03
+    hours, _ = m["crossings_adj"][0.5]
+    assert 6.0 <= hours <= 6.5
+
+
+def test_event_not_distinguishable_from_baseline_is_skipped():
+    s = _storm_on_baseline(base=100, peak_excess=50)  # peak 150 < 3x baseline
+    m = oe.decay_metrics(s, T0 + timedelta(hours=1))
+    assert m["distinguishable"] is False
+    assert m["remaining_adj"][6][0] is None and m["crossings_adj"][0.5] is None
+
+
+def test_curve_rows_shape_and_first_row():
+    s = _storm_on_baseline()
+    m = oe.decay_metrics(s, T0 + timedelta(hours=1))
+    rows = oe.curve_rows(s, m, "Test", max_hours=48)
+    assert len(rows) == 49
+    assert rows[0][1] == 0 and abs(rows[0][5] - 1.0) < 1e-9 and rows[0][0] == "Test"
